@@ -61,7 +61,7 @@ After restart it should look like this:
 
 ### ✅ Usage Flow
 
-1. Open **Jadx** with the plugin JAR placed in its `plugins/` folder
+1. Open **Jadx** with the latest plugin JAR from [the releases](https://github.com/mobilehackinglab/jadx-mcp-plugin/releases) placed in its `plugins/` folder or load it via `Plugins` -> `install plugin`.
 2. Load an APK or DEX file
 3. Claude will detect and activate the **Jadx MCP Server** tools
 4. You can now list classes, fetch source, inspect methods/fields, and extract code live
