@@ -1,0 +1,52 @@
+plugins {
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
+    id 'java'
+}
+
+group = 'jadx.plugins'
+version = '1.0'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.json:json:20231013'
+    compileOnly("io.github.skylot:jadx-core:1.5.1")
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17) // Also supported older Java versions
+    }
+}
+
+jar {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    archiveBaseName = 'jadx-mcp-plugin' 
+    
+    manifest {
+        attributes(
+            'Jadx-Plugin': 'true',
+            'Jadx-Plugin-Class': 'com.mobilehackinglab.jadxplugin.McpPlugin',
+            'Jadx-Plugin-Version': '1.0.0',
+            'Jadx-Plugin-Id': 'jadx-mcp-plugin',
+            'Jadx-Plugin-Description': 'Exposes Jadx info over HTTP',
+            'Jadx-Plugin-Author': 'Mobile Hacking Lab'
+        )
+    }
+    
+    // This ensures all dependencies are included
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    
+    // Exclude problematic files from dependencies
+    exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA', 'META-INF/MANIFEST.MF'
+}
+
+shadowJar {
+    archiveBaseName = 'jadx-mcp-plugin'
+    archiveVersion = '1.0.0'
+    mergeServiceFiles()
+}

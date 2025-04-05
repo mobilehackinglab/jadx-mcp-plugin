@@ -1,0 +1,31 @@
+# Gradle build files
+.gradle/
+build/
+# keep wrapper
+!gradle/wrapper/gradle-wrapper.jar
+
+# Java class files
+*.class
+
+# Python files
+__pycache__/
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+
+# Environment files
+venv/
+.env
+
+# Logs
+*.log
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Local cache
+cache/
+*.jar
