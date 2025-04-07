@@ -25,19 +25,16 @@ pip install -r requirements.txt
 ```
 
 ### 🧠 Setup Claude MCP CLient Integration
-To use this adapter in Claude Desktop, go to `File` -> `Settings` -> `Developer` -> `Edit Config` -> `claude_desktop_config.json` and add an MCP server pointing to the python executable in the venv (to prevent depedency issues) and the full adapater path following below examples:
+To use this adapter in Claude Desktop, go to `File` -> `Settings` -> `Developer` -> `Edit Config` -> `claude_desktop_config.json` and add an MCP server pointing to the Python executable in the venv (to prevent depedency issues) and the full adapter path following below examples:
 
 Windows:
 
 ```json
 {
   "mcpServers": {
-    "ghidra": {
-      "command": "python",
-      "args": [
-        "C:\\Workset\\jadx-mcp-plugin\\venv\\Scripts\\python.exe",
-        "C:\\Workset\\jadx-mcp-plugin\\fastmcp_adapter.py"
-      ]
+    "Jadx MCP Server": {
+      "command": "C:\\Workset\\jadx-mcp-plugin\\venv\\Scripts\\python.exe",
+      "args": ["C:\\Workset\\jadx-mcp-plugin\\fastmcp_adapter.py"]
     }
   }
 }
