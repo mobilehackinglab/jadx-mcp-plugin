@@ -1,4 +1,4 @@
-from fastmcp import FastMCP
+from mcp.server.fastmcp import FastMCP
 import requests
 from requests.exceptions import ConnectionError
 import sys
