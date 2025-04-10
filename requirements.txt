@@ -1,2 +1,2 @@
-fastmcp
+mcp
 requests

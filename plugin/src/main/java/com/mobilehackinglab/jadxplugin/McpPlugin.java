@@ -31,15 +31,20 @@ public class McpPlugin implements JadxPlugin {
     private final int port = 8085;
 
     public McpPlugin() {
-    } // No args constructor
+    }
 
+    /**
+     * Called by Jadx to initialize the plugin.
+     */
     @Override
     public void init(JadxPluginContext context) {
         this.context = context;
-
         new Thread(this::safePluginStartup).start();
     }
 
+    /**
+     * Starts the HTTP server if Jadx is ready.
+     */
     private void safePluginStartup() {
         if (!waitForJadxLoad()) {
             System.err.println("[MCP] Jadx initialization failed. Not starting server.");
@@ -54,6 +59,9 @@ public class McpPlugin implements JadxPlugin {
         }
     }
 
+    /**
+     * Waits for the Jadx decompiler to finish loading classes.
+     */
     private boolean waitForJadxLoad() {
         int retries = 0;
         while (retries < 30) {
@@ -76,6 +84,9 @@ public class McpPlugin implements JadxPlugin {
         return false;
     }
 
+    /**
+     * Provides metadata for the plugin to Jadx.
+     */
     @Override
     public JadxPluginInfo getPluginInfo() {
         return new JadxPluginInfo(
@@ -86,6 +97,9 @@ public class McpPlugin implements JadxPlugin {
                 "1.0.0");
     }
 
+    /**
+     * Cleanly shuts down the server and executor.
+     */
     public void destroy() {
         running = false;
         if (serverSocket != null && !serverSocket.isClosed()) {
@@ -101,6 +115,9 @@ public class McpPlugin implements JadxPlugin {
         }
     }
 
+    /**
+     * Starts the TCP server and accepts incoming connections.
+     */
     private void startServer() throws IOException {
         serverSocket = new ServerSocket(port);
         executor = Executors.newFixedThreadPool(5);
@@ -118,6 +135,9 @@ public class McpPlugin implements JadxPlugin {
         }).start();
     }
 
+    /**
+     * Handles incoming HTTP requests to the plugin.
+     */
     private void handleConnection(Socket socket) {
         try (socket;
                 BufferedReader in = new BufferedReader(
@@ -178,21 +198,32 @@ public class McpPlugin implements JadxPlugin {
         }
     }
 
+    /**
+     * Return available tools for MCP server in JSON
+     */
     private String getToolsJson() {
         return """
-                    {
-                        "tools": [
-                            { "name": "get_class_source", "description": "Returns the decompiled source of a class.", "parameters": { "class_name": "string" } },
-                            { "name": "search_method_by_name", "description": "Search methods by name.", "parameters": { "method_name": "string" } },
-                            { "name": "list_all_classes", "description": "Returns a list of all class names.", "parameters": {} },
-                            { "name": "get_methods_of_class", "description": "Returns all method names of a class.", "parameters": { "class_name": "string" } },
-                            { "name": "get_fields_of_class", "description": "Returns all field names of a class.", "parameters": { "class_name": "string" } },
-                            { "name": "get_method_code", "description": "Returns the code for a specific method.", "parameters": { "class_name": "string", "method_name": "string" } }
-                        ]
-                    }
+                {
+                    "tools": [
+                        { "name": "get_class_source", "description": "Returns the decompiled source of a class.", "parameters": { "class_name": "string" } },
+                        { "name": "search_method_by_name", "description": "Search methods by name.", "parameters": { "method_name": "string" } },
+                        { "name": "search_class_by_name", "description": "Search class names containing a keyword.", "parameters": { "query": "string" } },
+                        { "name": "list_all_classes", "description": "Returns a list of all class names.", "parameters": { "offset": "int", "limit": "int" } },
+                        { "name": "get_methods_of_class", "description": "Returns all method names of a class.", "parameters": { "class_name": "string" } },
+                        { "name": "get_fields_of_class", "description": "Returns all field names of a class.", "parameters": { "class_name": "string" } },
+                        { "name": "get_method_code", "description": "Returns the code for a specific method.", "parameters": { "class_name": "string", "method_name": "string" } }
+                    ]
+                }
                 """;
     }
 
+    /**
+     * Handles tool invocation from the client, routing to the correct handler.
+     *
+     * @param requestBody JSON request with tool and parameters
+     * @return JSON response string
+     * @throws JSONException if the input JSON is malformed
+     */
     private String processInvokeRequest(String requestBody) throws JSONException {
         JSONObject requestJson = new JSONObject(requestBody);
         String toolName = requestJson.getString("tool");
@@ -200,24 +231,45 @@ public class McpPlugin implements JadxPlugin {
         if (params == null)
             params = new JSONObject();
 
-        switch (toolName) {
-            case "get_class_source":
-                return handleGetClassSource(params);
-            case "search_method_by_name":
-                return handleSearchMethodByName(params);
-            case "list_all_classes":
-                return handleListAllClasses();
-            case "get_methods_of_class":
-                return handleGetMethodsOfClass(params);
-            case "get_fields_of_class":
-                return handleGetFieldsOfClass(params);
-            case "get_method_code":
-                return handleGetMethodCode(params);
-            default:
-                return "Unknown tool: " + toolName;
-        }
+        return switch (toolName) {
+            case "get_class_source" -> handleGetClassSource(params);
+            case "search_method_by_name" -> handleSearchMethodByName(params);
+            case "search_class_by_name" -> handleSearchClassByName(params);
+            case "list_all_classes" -> handleListAllClasses(params);
+            case "get_methods_of_class" -> handleGetMethodsOfClass(params);
+            case "get_fields_of_class" -> handleGetFieldsOfClass(params);
+            case "get_method_code" -> handleGetMethodCode(params);
+            default -> new JSONObject().put("error", "Unknown tool: " + toolName).toString();
+        };
     }
 
+    /**
+     * Search class names based on a partial query string and return matches.
+     *
+     * @param params JSON object with key "query"
+     * @return JSON object with array of matched class names under "results"
+     */
+    private String handleSearchClassByName(JSONObject params) {
+        String query = params.optString("query", "").toLowerCase();
+        JSONArray array = new JSONArray();
+        for (JavaClass cls : context.getDecompiler().getClassesWithInners()) {
+            String fullName = cls.getFullName();
+            if (fullName.toLowerCase().contains(query)) {
+                array.put(fullName);
+            }
+        }
+        return new JSONObject().put("results", array).toString();
+    }
+
+    /**
+     * Retrieves the full decompiled source code of a specific Java class.
+     *
+     * @param params A JSON object containing the required parameter:
+     *               - "class_name": The fully qualified name of the class to
+     *               retrieve.
+     * @return The decompiled source code of the class, or an error message if not
+     *         found.
+     */
     private String handleGetClassSource(JSONObject params) {
         try {
             String className = params.getString("class_name");
@@ -232,6 +284,16 @@ public class McpPlugin implements JadxPlugin {
         }
     }
 
+    /**
+     * Searches all decompiled classes for methods whose names match or contain the
+     * provided string.
+     *
+     * @param params A JSON object containing the required parameter:
+     *               - "method_name": A case-insensitive string to match method
+     *               names.
+     * @return A newline-separated list of matched methods with their class names,
+     *         or a message if no match is found.
+     */
     private String handleSearchMethodByName(JSONObject params) {
         try {
             String methodName = params.getString("method_name");
@@ -250,19 +312,45 @@ public class McpPlugin implements JadxPlugin {
         }
     }
 
-    private String handleListAllClasses() {
+    /**
+     * Lists all classes with optional pagination.
+     *
+     * @param params JSON with optional offset and limit
+     * @return JSON response with class list and metadata
+     */
+    private String handleListAllClasses(JSONObject params) {
+        int offset = params.optInt("offset", 0);
+        int limit = params.optInt("limit", 250);
+        int maxLimit = 500;
+        if (limit > maxLimit)
+            limit = maxLimit;
+
+        List<JavaClass> allClasses = context.getDecompiler().getClassesWithInners();
+        int total = allClasses.size();
+
         JSONArray array = new JSONArray();
-        for (JavaClass cls : context.getDecompiler().getClassesWithInners()) {
-            try {
-                // cls.decompile(); // this may throw
-                array.put(cls.getFullName());
-            } catch (Exception e) {
-                System.err.println("[MCP] Failed to decompile class: " + cls.getFullName() + " - " + e.getMessage());
-            }
+        for (int i = offset; i < Math.min(offset + limit, total); i++) {
+            JavaClass cls = allClasses.get(i);
+            array.put(cls.getFullName());
         }
-        return new JSONObject().put("classes", array).toString();
+
+        JSONObject response = new JSONObject();
+        response.put("total", total);
+        response.put("offset", offset);
+        response.put("limit", limit);
+        response.put("classes", array);
+
+        return response.toString();
     }
 
+    /**
+     * Retrieves a list of all method names declared in the specified Java class.
+     *
+     * @param params A JSON object containing the required parameter:
+     *               - "class_name": The fully qualified name of the class.
+     * @return A formatted JSON array of method names, or an error message if the
+     *         class is not found.
+     */
     private String handleGetMethodsOfClass(JSONObject params) {
         try {
             String className = params.getString("class_name");
@@ -281,6 +369,14 @@ public class McpPlugin implements JadxPlugin {
         }
     }
 
+    /**
+     * Retrieves all field names defined in the specified Java class.
+     *
+     * @param params A JSON object containing the required parameter:
+     *               - "class_name": The fully qualified name of the class.
+     * @return A formatted JSON array of field names, or an error message if the
+     *         class is not found.
+     */
     private String handleGetFieldsOfClass(JSONObject params) {
         try {
             String className = params.getString("class_name");
@@ -299,6 +395,16 @@ public class McpPlugin implements JadxPlugin {
         }
     }
 
+    /**
+     * Extracts the decompiled source code of a specific method within a given
+     * class.
+     *
+     * @param params A JSON object containing the required parameters:
+     *               - "class_name": The fully qualified name of the class.
+     *               - "method_name": The name of the method to extract.
+     * @return A string containing the method's source code block (if found),
+     *         or a descriptive error message if the method or class is not found.
+     */
     private String handleGetMethodCode(JSONObject params) {
         try {
             String className = params.getString("class_name");
@@ -350,9 +456,12 @@ public class McpPlugin implements JadxPlugin {
         return -1; // No matching bracket found
     }
 
-    // Workaround for: When you use "File → Open" to load a new file,
-    // Jadx replaces the internal decompiler instance, but your plugin still holds a
-    // stale reference to the old one.
+    /**
+     * Validates that the decompiler is loaded and usable.
+     * This is needed because: When you use "File → Open" to load a new file,
+     * Jadx replaces the internal decompiler instance, but your plugin still holds a
+     * stale reference to the old one.
+     */
     private boolean isDecompilerValid() {
         try {
             return context != null

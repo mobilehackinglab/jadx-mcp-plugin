@@ -1,13 +1,18 @@
-from fastmcp import FastMCP
+from mcp.server.fastmcp import FastMCP
 import requests
 from requests.exceptions import ConnectionError
 import sys
 
+# Create the MCP adapter with a human-readable name
 mcp = FastMCP("Jadx MCP Server")
 
+# Address of the Jadx MCP plugin's HTTP server
 MCP_SERVER = "http://localhost:8085"
 
-def invoke_jadx(tool, parameters={}):
+def invoke_jadx(tool: str, parameters: dict = {}) -> dict:
+    """
+    Internal helper to send a tool request to the Jadx MCP HTTP server.
+    """
     try:
         resp = requests.post(f"{MCP_SERVER}/invoke", json={"tool": tool, "parameters": parameters})
         resp.raise_for_status()
@@ -20,38 +25,75 @@ def invoke_jadx(tool, parameters={}):
     except Exception as e:
         raise RuntimeError(f"Unexpected error: {str(e)}")
 
+
 @mcp.tool()
-def list_all_classes() -> list:
-    result = invoke_jadx("list_all_classes")
-    return result
+def list_all_classes(limit: int = 250, offset: int = 0) -> dict:
+    """
+    Returns a paginated list of class names.
+
+    Params:
+    - limit: Max number of classes to return (default 250)
+    - offset: Starting index of class list
+    """
+    return invoke_jadx("list_all_classes", {"limit": limit, "offset": offset})
+
+
+@mcp.tool()
+def search_class_by_name(query: str) -> dict:
+    """Search for class names that contain the given query string (case-insensitive)."""
+    return invoke_jadx("search_class_by_name", {"query": query})
+
 
 @mcp.tool()
 def get_class_source(class_name: str) -> str:
-    result = invoke_jadx("get_class_source", {"class_name": class_name})
-    return result
+    """
+   Returns the full decompiled source code of a given class.
+    """
+    return invoke_jadx("get_class_source", {"class_name": class_name})
+
 
 @mcp.tool()
 def search_method_by_name(method_name: str) -> str:
-    result = invoke_jadx("search_method_by_name", {"method_name": method_name})
-    return result
+    """
+   Searches for all methods matching the provided name.
+   Returns class and method pairs as string.
+    """
+    return invoke_jadx("search_method_by_name", {"method_name": method_name})
+
 
 @mcp.tool()
 def get_methods_of_class(class_name: str) -> list:
-    result = invoke_jadx("get_methods_of_class", {"class_name": class_name})
-    return result
+    """
+   Returns all method names declared in the specified class.
+    """
+    return invoke_jadx("get_methods_of_class", {"class_name": class_name})
+
 
 @mcp.tool()
 def get_fields_of_class(class_name: str) -> list:
-    result = invoke_jadx("get_fields_of_class", {"class_name": class_name})
-    return result
+    """
+   Returns all field names declared in the specified class.
+    """
+    return invoke_jadx("get_fields_of_class", {"class_name": class_name})
+
 
 @mcp.tool()
 def get_method_code(class_name: str, method_name: str) -> str:
-    result = invoke_jadx("get_method_code", {"class_name": class_name, "method_name": method_name})
-    return result
+    """
+   Returns only the source code block of a specific method within a class.
+    """
+    return invoke_jadx("get_method_code", {
+        "class_name": class_name,
+        "method_name": method_name
+    })
+
 
 @mcp.resource("jadx://tools")
 def get_tools_resource() -> dict:
+    """
+   Fetches the list of all available tools and their descriptions from the Jadx plugin.
+    Used for dynamic tool discovery.
+    """
     try:
         resp = requests.get(f"{MCP_SERVER}/tools")
         resp.raise_for_status()
