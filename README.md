@@ -1,6 +1,6 @@
 ## ⚙️ Jadx MCP Plugin — Decompiler Access for Claude via MCP
 
-This project provides a [Jadx](https://github.com/skylot/jadx) plugin written in **Java**, which exposes the **Jadx API over HTTP** — enabling live interaction through [Claude](https://www.anthropic.com/index/introducing-claude) via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/). A lightweight [FastMCP](https://github.com/pacocoursey/fastmcp) adapter in Python acts as a bridge between Claude and the plugin.
+This project provides a [Jadx](https://github.com/skylot/jadx) plugin written in **Java**, which exposes the **Jadx API over HTTP** — enabling live interaction through MCP clients like [Claude](https://www.anthropic.com/index/introducing-claude) via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/). A lightweight [FastMCP](https://github.com/modelcontextprotocol/python-sdk?tab=readme-ov-file#resources) adapter in Python acts as a bridge between Claude and the plugin. This enables intelligent navigation and automation of reverse engineering workflows, ideal for AI-assisted security analysis of Android apps.
 
 ---
 
@@ -70,8 +70,9 @@ After restart it should look like this:
 | Tool                  | Description                           |
 |-----------------------|---------------------------------------|
 | `list_all_classes`    | Get all decompiled class names        |
+| `search_class_by_name` | Find classes matching a string       |
 | `get_class_source`    | Get full source of a given class      |
-| `search_method_by_name` | Find methods matching a string     |
+| `search_method_by_name` | Find methods matching a string      |
 | `get_methods_of_class` | List all method names in a class     |
 | `get_fields_of_class`  | List all field names in a class      |
 | `get_method_code`     | Extract decompiled code for a method  |
@@ -126,5 +127,5 @@ This project is maintained by [Mobile Hacking Lab](https://github.com/mobilehack
 ## 🧩 Credits
 
 - [Jadx](https://github.com/skylot/jadx)
-- [FastMCP](https://github.com/jlowin/fastmcp)
+- [FastMCP](https://github.com/modelcontextprotocol/python-sdk)
 - [Claude by Anthropic](https://www.anthropic.com)
