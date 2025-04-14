@@ -56,15 +56,6 @@ Make sure to restart (Quit) Claude after editing the config.
 After restart it should look like this:
 ![](img/jadx-mcp-running.png)
 
-### ✅ Usage Flow
-
-1. Open **Jadx** with the latest plugin JAR from [the releases](https://github.com/mobilehackinglab/jadx-mcp-plugin/releases) placed in its `plugins/` folder or load it via `Plugins` -> `install plugin`.
-2. Load an APK or DEX file
-3. Claude will detect and activate the **Jadx MCP Server** tools
-4. You can now list classes, fetch source, inspect methods/fields, and extract code live
-
-Here’s the updated section, now including a note about the `fastmcp_adapter.py`:
-
 ---
 
 ### ✅ Usage Flow
@@ -102,32 +93,6 @@ Here’s the updated section, now including a note about the `fastmcp_adapter.py
 
 ## 🛠 Development
 
-### Java Plugin
-
-The Java plugin is located at:
-
-```
-plugin/src/main/java/com/mobilehackinglab/jadxplugin/McpPlugin.java
-```
-
-It uses the `JadxPlugin` API (`jadx.api.*`) to:
-- Load decompiled classes and methods
-- Serve structured data via an embedded HTTP server
-- Respond to `/invoke` and `/tools` endpoints
-
-To build the plugin:
-
-```bash
-./gradlew build
-# Output: plugin/build/libs/jadx-mcp-plugin-<version>-all.jar
-```
-
-Place the `.jar` in your Jadx `plugins/` folder.
-
-Got it! Here's the revised **Java Plugin** section, preserving the manual installation steps while introducing your new Gradle-powered method as the easier alternative:
-
----
-
 ### ☕ Java Plugin
 
 The Java plugin is located at:
@@ -154,6 +119,13 @@ You can use the following Gradle task to build and install the plugin in one ste
 For other plugin-related tasks (uninstall, enable/disable), see the task definitions in [`plugin/build.gradle`](./plugin/build.gradle).
 
 #### 🔧 Manual Installation
+
+To build the plugin:
+
+```bash
+./gradlew build
+# Output: plugin/build/libs/jadx-mcp-plugin-<version>.jar
+```
 
 Install the plugin JAR using the `jadx plugins` CLI:
 
