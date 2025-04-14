@@ -12,8 +12,7 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.PrintWriter;
-import java.net.ServerSocket;
-import java.net.Socket;
+import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -24,11 +23,13 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 public class McpPlugin implements JadxPlugin {
+    public static final String PLUGIN_ID="jadx-mcp";
+
     private ServerSocket serverSocket;
     private ExecutorService executor;
     private JadxPluginContext context;
+    private McpPluginOptions pluginOptions;
     private boolean running = false;
-    private final int port = 8085;
 
     public McpPlugin() {
     }
@@ -39,6 +40,10 @@ public class McpPlugin implements JadxPlugin {
     @Override
     public void init(JadxPluginContext context) {
         this.context = context;
+
+        this.pluginOptions = new McpPluginOptions();
+        this.context.registerOptions(this.pluginOptions);
+
         new Thread(this::safePluginStartup).start();
     }
 
@@ -52,9 +57,10 @@ public class McpPlugin implements JadxPlugin {
         }
 
         try {
-            startServer();
-            System.out.println("[MCP] Server started successfully at http://localhost:" + port);
-        } catch (IOException e) {
+            URL httpInterface = parseHttpInterface(pluginOptions.getHttpInterface());
+            startServer(httpInterface);
+            System.out.println("[MCP] Server started successfully at " + httpInterface.getProtocol() + "://" + httpInterface.getHost() + ":" + httpInterface.getPort());
+        } catch (IOException | IllegalArgumentException e) {
             System.err.println("[MCP] Failed to start server: " + e.getMessage());
         }
     }
@@ -90,7 +96,7 @@ public class McpPlugin implements JadxPlugin {
     @Override
     public JadxPluginInfo getPluginInfo() {
         return new JadxPluginInfo(
-                "jadx-mcp",
+                PLUGIN_ID,
                 "JADX MCP Plugin",
                 "Exposes Jadx info over HTTP",
                 "https://github.com/mobilehackinglab/jadx-mcp-plugin",
@@ -118,8 +124,13 @@ public class McpPlugin implements JadxPlugin {
     /**
      * Starts the TCP server and accepts incoming connections.
      */
-    private void startServer() throws IOException {
-        serverSocket = new ServerSocket(port);
+    private void startServer(URL httpInterface) throws IOException {
+
+        String host = httpInterface.getHost();
+        int port = httpInterface.getPort();
+        InetAddress bindAddr = InetAddress.getByName(host);
+
+        serverSocket = new ServerSocket(port, 50, bindAddr);
         executor = Executors.newFixedThreadPool(5);
         running = true;
         new Thread(() -> {
@@ -140,9 +151,9 @@ public class McpPlugin implements JadxPlugin {
      */
     private void handleConnection(Socket socket) {
         try (socket;
-                BufferedReader in = new BufferedReader(
-                        new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
-                OutputStream outStream = socket.getOutputStream()) {
+             BufferedReader in = new BufferedReader(
+                 new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+             OutputStream outStream = socket.getOutputStream()) {
 
             String requestLine = in.readLine();
             if (requestLine == null)
@@ -470,6 +481,48 @@ public class McpPlugin implements JadxPlugin {
                     && !context.getDecompiler().getClassesWithInners().isEmpty();
         } catch (Exception e) {
             return false;
+        }
+    }
+
+    /**
+     * Parses and validates the given HTTP interface string.
+     *
+     * <p>This method strictly enforces that the input must be a complete HTTP URL
+     * with a protocol of {@code http}, a non-empty host, and an explicit port.</p>
+     *
+     * <p>Examples of valid input: {@code http://127.0.0.1:8080}, {@code http://localhost:3000}</p>
+     *
+     * @param httpInterface A string representing the HTTP interface.
+     * @return A {@link URL} object representing the parsed interface.
+     * @throws IllegalArgumentException if the URL is malformed or missing required components.
+     */
+    private URL parseHttpInterface(String httpInterface) throws IllegalArgumentException {
+        try {
+            URL url = new URL(httpInterface);
+
+            if (!"http".equalsIgnoreCase(url.getProtocol())) {
+                throw new IllegalArgumentException("Invalid protocol: " + url.getProtocol() + ". Only 'http' is supported.");
+            }
+
+            if (url.getHost() == null || url.getHost().isEmpty()) {
+                throw new IllegalArgumentException("Missing or invalid host in HTTP interface: " + httpInterface);
+            }
+
+            if (url.getPort() == -1) {
+                throw new IllegalArgumentException("Port must be explicitly specified in HTTP interface: " + httpInterface);
+            }
+
+            if (url.getPath() != null && !url.getPath().isEmpty() && !url.getPath().equals("/")) {
+                throw new IllegalArgumentException("Path is not allowed in HTTP interface: " + httpInterface);
+            }
+
+            if (url.getQuery() != null || url.getRef() != null || url.getUserInfo() != null) {
+                throw new IllegalArgumentException("HTTP interface must not contain query, fragment, or user info: " + httpInterface);
+            }
+
+            return url;
+        } catch (MalformedURLException e) {
+            throw new IllegalArgumentException("Malformed HTTP interface URL: " + httpInterface, e);
         }
     }
 }

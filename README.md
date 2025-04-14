@@ -63,6 +63,27 @@ After restart it should look like this:
 3. Claude will detect and activate the **Jadx MCP Server** tools
 4. You can now list classes, fetch source, inspect methods/fields, and extract code live
 
+Here’s the updated section, now including a note about the `fastmcp_adapter.py`:
+
+---
+
+### ✅ Usage Flow
+
+1. Open **Jadx** with the latest plugin JAR from [the releases](https://github.com/mobilehackinglab/jadx-mcp-plugin/releases) placed in its `plugins/` folder or load it via `Plugins` -> `install plugin`.
+2. Load an APK or DEX file
+3. (Optional) You can specify the HTTP interface address by launching Jadx with:
+
+    ```bash
+    jadx-gui -Pjadx-mcp.http-interface=http://localhost:8085
+    ```
+
+   This is useful if you want to change the default host/port (`http://localhost:8085`).
+
+   > **Note:** If you change the interface address here, make sure to also update the corresponding URL in `fastmcp_adapter.py` to match.
+
+4. Claude will detect and activate the Jadx MCP Server tools.
+5. You can now list classes, fetch source, inspect methods/fields, and extract code live.
+
 ---
 
 ## 🧪 Tools Provided
@@ -102,6 +123,51 @@ To build the plugin:
 ```
 
 Place the `.jar` in your Jadx `plugins/` folder.
+
+Got it! Here's the revised **Java Plugin** section, preserving the manual installation steps while introducing your new Gradle-powered method as the easier alternative:
+
+---
+
+### ☕ Java Plugin
+
+The Java plugin is located at:
+
+```
+plugin/src/main/java/com/mobilehackinglab/jadxplugin/McpPlugin.java
+```
+
+It uses the `JadxPlugin` API (`jadx.api.*`) to:
+- Load decompiled classes and methods
+- Serve structured data via an embedded HTTP server
+- Respond to `/invoke` and `/tools` endpoints
+
+#### 🚀 Automated Installation with Gradle Tasks
+
+You can use the following Gradle task to build and install the plugin in one step:
+
+```bash
+./gradlew installPlugin
+```
+
+> This uses the `jadx plugins` CLI. Make sure Jadx is installed and available in your `PATH`.
+
+For other plugin-related tasks (uninstall, enable/disable), see the task definitions in [`plugin/build.gradle`](./plugin/build.gradle).
+
+#### 🔧 Manual Installation
+
+Install the plugin JAR using the `jadx plugins` CLI:
+
+```bash
+jadx plugins --install-jar path/to/jadx-mcp-plugin-<version>.jar
+```
+
+Alternatively, place the built `.jar` file into your Jadx `plugins/` folder, typically located at: `~/.jadx/plugins/`
+
+If you place the JAR manually, you’ll also need to enable the plugin through the Jadx GUI or by running:
+
+```bash
+jadx plugins --enable jadx-mcp
+```
 
 ---
 

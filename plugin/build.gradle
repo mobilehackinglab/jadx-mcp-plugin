@@ -50,3 +50,40 @@ shadowJar {
     archiveVersion = '1.1.0'
     mergeServiceFiles()
 }
+
+// Installs the plugin JAR into Jadx
+tasks.register("installPlugin", Exec) {
+    group = "plugin"
+    description = "Installs the jadx-mcp plugin."
+
+    dependsOn jar
+
+    doFirst {
+        def pluginJar = layout.buildDirectory.file("libs/jadx-mcp-plugin-${project.version}.jar").get().asFile.absolutePath
+        commandLine "sh", "-c", """
+            jadx plugins --uninstall jadx-mcp >/dev/null
+            jadx plugins --install-jar \"${pluginJar}\"
+        """
+    }
+}
+
+// Uninstalls the plugin from Jadx
+tasks.register("uninstallPlugin", Exec) {
+    group = "plugin"
+    description = "Uninstalls the jadx-mcp plugin."
+    commandLine "sh", "-c", "jadx plugins --uninstall jadx-mcp"
+}
+
+// Enables the plugin after it's installed
+tasks.register("enablePlugin", Exec) {
+    group = "plugin"
+    description = "Enables the jadx-mcp plugin."
+    commandLine "sh", "-c", "jadx plugins --enable jadx-mcp"
+}
+
+// Disables the plugin
+tasks.register("disablePlugin", Exec) {
+    group = "plugin"
+    description = "Disables the jadx-mcp plugin."
+    commandLine "sh", "-c", "jadx plugins --disable jadx-mcp"
+}

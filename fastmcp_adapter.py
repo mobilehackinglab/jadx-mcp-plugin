@@ -7,14 +7,15 @@ import sys
 mcp = FastMCP("Jadx MCP Server")
 
 # Address of the Jadx MCP plugin's HTTP server
-MCP_SERVER = "http://localhost:8085"
+DEFAULT_MCP_SERVER = "http://localhost:8085"
+mcp_server = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_MCP_SERVER
 
 def invoke_jadx(tool: str, parameters: dict = {}) -> dict:
     """
     Internal helper to send a tool request to the Jadx MCP HTTP server.
     """
     try:
-        resp = requests.post(f"{MCP_SERVER}/invoke", json={"tool": tool, "parameters": parameters})
+        resp = requests.post(f"{mcp_server}/invoke", json={"tool": tool, "parameters": parameters})
         resp.raise_for_status()
         data = resp.json()
         if "error" in data:
@@ -95,7 +96,7 @@ def get_tools_resource() -> dict:
     Used for dynamic tool discovery.
     """
     try:
-        resp = requests.get(f"{MCP_SERVER}/tools")
+        resp = requests.get(f"{mcp_server}/tools")
         resp.raise_for_status()
         return resp.json()
     except ConnectionError:
