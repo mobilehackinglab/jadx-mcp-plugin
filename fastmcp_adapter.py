@@ -88,6 +88,12 @@ def get_method_code(class_name: str, method_name: str) -> str:
         "method_name": method_name
     })
 
+@mcp.tool()
+def get_android_manifest() -> str:
+    """
+   Returns the content of AndroidManifest.xml
+    """
+    return invoke_jadx("get_android_manifest")
 
 @mcp.resource("jadx://tools")
 def get_tools_resource() -> dict:
