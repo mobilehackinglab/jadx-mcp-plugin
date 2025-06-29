@@ -6,6 +6,9 @@ import jadx.api.JavaMethod;
 import jadx.api.plugins.JadxPlugin;
 import jadx.api.plugins.JadxPluginContext;
 import jadx.api.plugins.JadxPluginInfo;
+import jadx.api.ResourceFile;
+import jadx.api.ResourceType;
+import jadx.core.xmlgen.ResContainer;
 
 import java.io.IOException;
 import java.io.BufferedReader;
@@ -219,6 +222,7 @@ public class McpPlugin implements JadxPlugin {
                         { "name": "get_class_source", "description": "Returns the decompiled source of a class.", "parameters": { "class_name": "string" } },
                         { "name": "search_method_by_name", "description": "Search methods by name.", "parameters": { "method_name": "string" } },
                         { "name": "search_class_by_name", "description": "Search class names containing a keyword.", "parameters": { "query": "string" } },
+                        { "name": "get_android_manifest", "description": "Returns the content of AndroidManifest.xml if available.", "parameters": {} },
                         { "name": "list_all_classes", "description": "Returns a list of all class names.", "parameters": { "offset": "int", "limit": "int" } },
                         { "name": "get_methods_of_class", "description": "Returns all method names of a class.", "parameters": { "class_name": "string" } },
                         { "name": "get_fields_of_class", "description": "Returns all field names of a class.", "parameters": { "class_name": "string" } },
@@ -246,6 +250,7 @@ public class McpPlugin implements JadxPlugin {
             case "get_class_source" -> handleGetClassSource(params);
             case "search_method_by_name" -> handleSearchMethodByName(params);
             case "search_class_by_name" -> handleSearchClassByName(params);
+            case "get_android_manifest" -> handleGetAndroidManifest();
             case "list_all_classes" -> handleListAllClasses(params);
             case "get_methods_of_class" -> handleGetMethodsOfClass(params);
             case "get_fields_of_class" -> handleGetFieldsOfClass(params);
@@ -270,6 +275,31 @@ public class McpPlugin implements JadxPlugin {
             }
         }
         return new JSONObject().put("results", array).toString();
+    }
+
+    /**
+     * Retrieves the content of AndroidManifest.xml
+     *
+     * This extracts the decoded XML from the ResContainer returned by loadContent().
+     *
+     * @return The manifest XML as a string or an error message.
+     */
+    private String handleGetAndroidManifest() {
+        try {
+            for (ResourceFile resFile : context.getDecompiler().getResources()) {
+                if (resFile.getType() == ResourceType.MANIFEST) {
+                    ResContainer container = resFile.loadContent();
+                    if (container.getText() != null) {
+                        return container.getText().getCodeStr(); // decoded manifest
+                    } else {
+                        return "Manifest content is empty or could not be decoded.";
+                    }
+                }
+            }
+            return "AndroidManifest.xml not found.";
+        } catch (Exception e) {
+            return "Error retrieving AndroidManifest.xml: " + e.getMessage();
+        }
     }
 
     /**

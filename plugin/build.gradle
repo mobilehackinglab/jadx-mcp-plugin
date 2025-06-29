@@ -4,7 +4,7 @@ plugins {
 }
 
 group = 'jadx.plugins'
-version = '1.2'
+version = '1.3'
 
 repositories {
     mavenCentral()
@@ -12,7 +12,7 @@ repositories {
 
 dependencies {
     implementation 'org.json:json:20231013'
-    compileOnly("io.github.skylot:jadx-core:1.5.1")
+    compileOnly("io.github.skylot:jadx-core:1.5.2")
 }
 
 java {
@@ -47,7 +47,7 @@ jar {
 
 shadowJar {
     archiveBaseName = 'jadx-mcp-plugin'
-    archiveVersion = '1.2.0'
+    archiveVersion = '1.3.0'
     mergeServiceFiles()
 }
 
