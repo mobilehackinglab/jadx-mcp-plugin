@@ -10,6 +10,9 @@ build/
 # Python files
 __pycache__/
 
+# Python build files
+dist/
+
 # IDE files
 .idea/
 .vscode/
