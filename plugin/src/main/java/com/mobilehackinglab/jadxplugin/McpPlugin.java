@@ -1,32 +1,23 @@
 package com.mobilehackinglab.jadxplugin;
 
-import jadx.api.JavaClass;
-import jadx.api.JavaField;
-import jadx.api.JavaMethod;
+import jadx.api.*;
 import jadx.api.plugins.JadxPlugin;
 import jadx.api.plugins.JadxPluginContext;
 import jadx.api.plugins.JadxPluginInfo;
-import jadx.api.ResourceFile;
-import jadx.api.ResourceType;
 import jadx.core.xmlgen.ResContainer;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
-import java.io.IOException;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.io.PrintWriter;
+import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-
 public class McpPlugin implements JadxPlugin {
-    public static final String PLUGIN_ID="jadx-mcp";
+    public static final String PLUGIN_ID = "jadx-mcp";
 
     private ServerSocket serverSocket;
     private ExecutorService executor;
@@ -48,6 +39,19 @@ public class McpPlugin implements JadxPlugin {
         this.context.registerOptions(this.pluginOptions);
 
         new Thread(this::safePluginStartup).start();
+    }
+
+    /**
+     * Provides metadata for the plugin to Jadx.
+     */
+    @Override
+    public JadxPluginInfo getPluginInfo() {
+        return new JadxPluginInfo(
+                PLUGIN_ID,
+                "JADX MCP Plugin",
+                "Exposes Jadx info over HTTP",
+                "https://github.com/mobilehackinglab/jadx-mcp-plugin",
+                "1.4.0");
     }
 
     /**
@@ -94,410 +98,6 @@ public class McpPlugin implements JadxPlugin {
     }
 
     /**
-     * Provides metadata for the plugin to Jadx.
-     */
-    @Override
-    public JadxPluginInfo getPluginInfo() {
-        return new JadxPluginInfo(
-                PLUGIN_ID,
-                "JADX MCP Plugin",
-                "Exposes Jadx info over HTTP",
-                "https://github.com/mobilehackinglab/jadx-mcp-plugin",
-                "1.0.0");
-    }
-
-    /**
-     * Cleanly shuts down the server and executor.
-     */
-    public void destroy() {
-        running = false;
-        if (serverSocket != null && !serverSocket.isClosed()) {
-            try {
-                serverSocket.close();
-            } catch (IOException e) {
-                // Ignore
-            }
-        }
-
-        if (executor != null) {
-            executor.shutdown();
-        }
-    }
-
-    /**
-     * Starts the TCP server and accepts incoming connections.
-     */
-    private void startServer(URL httpInterface) throws IOException {
-
-        String host = httpInterface.getHost();
-        int port = httpInterface.getPort();
-        InetAddress bindAddr = InetAddress.getByName(host);
-
-        serverSocket = new ServerSocket(port, 50, bindAddr);
-        executor = Executors.newFixedThreadPool(5);
-        running = true;
-        new Thread(() -> {
-            while (running) {
-                try {
-                    Socket clientSocket = serverSocket.accept();
-                    executor.submit(() -> handleConnection(clientSocket));
-                } catch (IOException e) {
-                    if (running)
-                        System.err.println("[MCP] Error accepting connection: " + e.getMessage());
-                }
-            }
-        }).start();
-    }
-
-    /**
-     * Handles incoming HTTP requests to the plugin.
-     */
-    private void handleConnection(Socket socket) {
-        try (socket;
-             BufferedReader in = new BufferedReader(
-                 new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
-             OutputStream outStream = socket.getOutputStream()) {
-
-            String requestLine = in.readLine();
-            if (requestLine == null)
-                return;
-
-            String method = requestLine.split(" ")[0];
-            String path = requestLine.split(" ")[1];
-
-            int contentLength = 0;
-            String header;
-            while (!(header = in.readLine()).isEmpty()) {
-                if (header.toLowerCase().startsWith("content-length:")) {
-                    contentLength = Integer.parseInt(header.substring("content-length:".length()).trim());
-                }
-            }
-
-            char[] buffer = new char[contentLength];
-            int bytesRead = in.read(buffer);
-            String body = new String(buffer, 0, bytesRead);
-
-            JSONObject responseJson;
-
-            if ("/invoke".equals(path) && "POST".equalsIgnoreCase(method)) {
-                try {
-                    String result = processInvokeRequest(body);
-                    if (result.trim().startsWith("{")) {
-                        responseJson = new JSONObject(result);
-                    } else {
-                        responseJson = new JSONObject().put("result", result);
-                    }
-                } catch (Exception e) {
-                    responseJson = new JSONObject().put("error", "Failed to process tool: " + e.getMessage());
-                }
-            } else if ("/tools".equals(path)) {
-                responseJson = new JSONObject(getToolsJson());
-            } else {
-                responseJson = new JSONObject().put("error", "Not found");
-            }
-
-            byte[] respBytes = responseJson.toString(2).getBytes(StandardCharsets.UTF_8);
-
-            PrintWriter out = new PrintWriter(outStream, true);
-            out.printf(
-                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %d\r\nConnection: close\r\n\r\n",
-                    respBytes.length);
-            out.flush();
-
-            outStream.write(respBytes);
-            outStream.flush();
-
-        } catch (Exception e) {
-            System.err.println("[MCP] Error handling connection: " + e.getMessage());
-        }
-    }
-
-    /**
-     * Return available tools for MCP server in JSON
-     */
-    private String getToolsJson() {
-        return """
-                {
-                    "tools": [
-                        { "name": "get_class_source", "description": "Returns the decompiled source of a class.", "parameters": { "class_name": "string" } },
-                        { "name": "search_method_by_name", "description": "Search methods by name.", "parameters": { "method_name": "string" } },
-                        { "name": "search_class_by_name", "description": "Search class names containing a keyword.", "parameters": { "query": "string" } },
-                        { "name": "get_android_manifest", "description": "Returns the content of AndroidManifest.xml if available.", "parameters": {} },
-                        { "name": "list_all_classes", "description": "Returns a list of all class names.", "parameters": { "offset": "int", "limit": "int" } },
-                        { "name": "get_methods_of_class", "description": "Returns all method names of a class.", "parameters": { "class_name": "string" } },
-                        { "name": "get_fields_of_class", "description": "Returns all field names of a class.", "parameters": { "class_name": "string" } },
-                        { "name": "get_method_code", "description": "Returns the code for a specific method.", "parameters": { "class_name": "string", "method_name": "string" } }
-                    ]
-                }
-                """;
-    }
-
-    /**
-     * Handles tool invocation from the client, routing to the correct handler.
-     *
-     * @param requestBody JSON request with tool and parameters
-     * @return JSON response string
-     * @throws JSONException if the input JSON is malformed
-     */
-    private String processInvokeRequest(String requestBody) throws JSONException {
-        JSONObject requestJson = new JSONObject(requestBody);
-        String toolName = requestJson.getString("tool");
-        JSONObject params = requestJson.optJSONObject("parameters");
-        if (params == null)
-            params = new JSONObject();
-
-        return switch (toolName) {
-            case "get_class_source" -> handleGetClassSource(params);
-            case "search_method_by_name" -> handleSearchMethodByName(params);
-            case "search_class_by_name" -> handleSearchClassByName(params);
-            case "get_android_manifest" -> handleGetAndroidManifest();
-            case "list_all_classes" -> handleListAllClasses(params);
-            case "get_methods_of_class" -> handleGetMethodsOfClass(params);
-            case "get_fields_of_class" -> handleGetFieldsOfClass(params);
-            case "get_method_code" -> handleGetMethodCode(params);
-            default -> new JSONObject().put("error", "Unknown tool: " + toolName).toString();
-        };
-    }
-
-    /**
-     * Search class names based on a partial query string and return matches.
-     *
-     * @param params JSON object with key "query"
-     * @return JSON object with array of matched class names under "results"
-     */
-    private String handleSearchClassByName(JSONObject params) {
-        String query = params.optString("query", "").toLowerCase();
-        JSONArray array = new JSONArray();
-        for (JavaClass cls : context.getDecompiler().getClassesWithInners()) {
-            String fullName = cls.getFullName();
-            if (fullName.toLowerCase().contains(query)) {
-                array.put(fullName);
-            }
-        }
-        return new JSONObject().put("results", array).toString();
-    }
-
-    /**
-     * Retrieves the content of AndroidManifest.xml
-     *
-     * This extracts the decoded XML from the ResContainer returned by loadContent().
-     *
-     * @return The manifest XML as a string or an error message.
-     */
-    private String handleGetAndroidManifest() {
-        try {
-            for (ResourceFile resFile : context.getDecompiler().getResources()) {
-                if (resFile.getType() == ResourceType.MANIFEST) {
-                    ResContainer container = resFile.loadContent();
-                    if (container.getText() != null) {
-                        return container.getText().getCodeStr(); // decoded manifest
-                    } else {
-                        return "Manifest content is empty or could not be decoded.";
-                    }
-                }
-            }
-            return "AndroidManifest.xml not found.";
-        } catch (Exception e) {
-            return "Error retrieving AndroidManifest.xml: " + e.getMessage();
-        }
-    }
-
-    /**
-     * Retrieves the full decompiled source code of a specific Java class.
-     *
-     * @param params A JSON object containing the required parameter:
-     *               - "class_name": The fully qualified name of the class to
-     *               retrieve.
-     * @return The decompiled source code of the class, or an error message if not
-     *         found.
-     */
-    private String handleGetClassSource(JSONObject params) {
-        try {
-            String className = params.getString("class_name");
-            for (JavaClass cls : context.getDecompiler().getClasses()) {
-                if (cls.getFullName().equals(className)) {
-                    return cls.getCode();
-                }
-            }
-            return "Class not found: " + className;
-        } catch (Exception e) {
-            return "Error fetching class: " + e.getMessage();
-        }
-    }
-
-    /**
-     * Searches all decompiled classes for methods whose names match or contain the
-     * provided string.
-     *
-     * @param params A JSON object containing the required parameter:
-     *               - "method_name": A case-insensitive string to match method
-     *               names.
-     * @return A newline-separated list of matched methods with their class names,
-     *         or a message if no match is found.
-     */
-    private String handleSearchMethodByName(JSONObject params) {
-        try {
-            String methodName = params.getString("method_name");
-            StringBuilder result = new StringBuilder();
-            for (JavaClass cls : context.getDecompiler().getClasses()) {
-                cls.decompile();
-                for (JavaMethod method : cls.getMethods()) {
-                    if (method.getName().toLowerCase().contains(methodName.toLowerCase())) {
-                        result.append(cls.getFullName()).append(" -> ").append(method.getName()).append("\n");
-                    }
-                }
-            }
-            return result.length() > 0 ? result.toString() : "No methods found for: " + methodName;
-        } catch (Exception e) {
-            return "Error searching methods: " + e.getMessage();
-        }
-    }
-
-    /**
-     * Lists all classes with optional pagination.
-     *
-     * @param params JSON with optional offset and limit
-     * @return JSON response with class list and metadata
-     */
-    private String handleListAllClasses(JSONObject params) {
-        int offset = params.optInt("offset", 0);
-        int limit = params.optInt("limit", 250);
-        int maxLimit = 500;
-        if (limit > maxLimit)
-            limit = maxLimit;
-
-        List<JavaClass> allClasses = context.getDecompiler().getClassesWithInners();
-        int total = allClasses.size();
-
-        JSONArray array = new JSONArray();
-        for (int i = offset; i < Math.min(offset + limit, total); i++) {
-            JavaClass cls = allClasses.get(i);
-            array.put(cls.getFullName());
-        }
-
-        JSONObject response = new JSONObject();
-        response.put("total", total);
-        response.put("offset", offset);
-        response.put("limit", limit);
-        response.put("classes", array);
-
-        return response.toString();
-    }
-
-    /**
-     * Retrieves a list of all method names declared in the specified Java class.
-     *
-     * @param params A JSON object containing the required parameter:
-     *               - "class_name": The fully qualified name of the class.
-     * @return A formatted JSON array of method names, or an error message if the
-     *         class is not found.
-     */
-    private String handleGetMethodsOfClass(JSONObject params) {
-        try {
-            String className = params.getString("class_name");
-            for (JavaClass cls : context.getDecompiler().getClasses()) {
-                if (cls.getFullName().equals(className)) {
-                    JSONArray array = new JSONArray();
-                    for (JavaMethod method : cls.getMethods()) {
-                        array.put(method.getName());
-                    }
-                    return array.toString(2);
-                }
-            }
-            return "Class not found: " + className;
-        } catch (Exception e) {
-            return "Error fetching methods: " + e.getMessage();
-        }
-    }
-
-    /**
-     * Retrieves all field names defined in the specified Java class.
-     *
-     * @param params A JSON object containing the required parameter:
-     *               - "class_name": The fully qualified name of the class.
-     * @return A formatted JSON array of field names, or an error message if the
-     *         class is not found.
-     */
-    private String handleGetFieldsOfClass(JSONObject params) {
-        try {
-            String className = params.getString("class_name");
-            for (JavaClass cls : context.getDecompiler().getClasses()) {
-                if (cls.getFullName().equals(className)) {
-                    JSONArray array = new JSONArray();
-                    for (JavaField field : cls.getFields()) {
-                        array.put(field.getName());
-                    }
-                    return array.toString(2);
-                }
-            }
-            return "Class not found: " + className;
-        } catch (Exception e) {
-            return "Error fetching fields: " + e.getMessage();
-        }
-    }
-
-    /**
-     * Extracts the decompiled source code of a specific method within a given
-     * class.
-     *
-     * @param params A JSON object containing the required parameters:
-     *               - "class_name": The fully qualified name of the class.
-     *               - "method_name": The name of the method to extract.
-     * @return A string containing the method's source code block (if found),
-     *         or a descriptive error message if the method or class is not found.
-     */
-    private String handleGetMethodCode(JSONObject params) {
-        try {
-            String className = params.getString("class_name");
-            String methodName = params.getString("method_name");
-            for (JavaClass cls : context.getDecompiler().getClasses()) {
-                if (cls.getFullName().equals(className)) {
-                    cls.decompile();
-                    for (JavaMethod method : cls.getMethods()) {
-                        if (method.getName().equals(methodName)) {
-                            String classCode = cls.getCode();
-                            int methodIndex = classCode.indexOf(method.getName());
-                            if (methodIndex != -1) {
-                                int openBracket = classCode.indexOf('{', methodIndex);
-                                if (openBracket != -1) {
-                                    int closeBracket = findMatchingBracket(classCode, openBracket);
-                                    if (closeBracket != -1) {
-                                        String methodCode = classCode.substring(openBracket, closeBracket + 1);
-                                        return methodCode;
-                                    }
-                                }
-                            }
-
-                            return "Could not extract method code from class source.";
-                        }
-                    }
-                    return "Method '" + methodName + "' not found in class '" + className + "'";
-                }
-            }
-            return "Class '" + className + "' not found";
-        } catch (Exception e) {
-            return "Error fetching method code: " + e.getMessage();
-        }
-    }
-
-    // Helper method to find matching closing bracket
-    private int findMatchingBracket(String code, int openPos) {
-        int depth = 1;
-        for (int i = openPos + 1; i < code.length(); i++) {
-            char c = code.charAt(i);
-            if (c == '{') {
-                depth++;
-            } else if (c == '}') {
-                depth--;
-                if (depth == 0) {
-                    return i;
-                }
-            }
-        }
-        return -1; // No matching bracket found
-    }
-
-    /**
      * Validates that the decompiler is loaded and usable.
      * This is needed because: When you use "File → Open" to load a new file,
      * Jadx replaces the internal decompiler instance, but your plugin still holds a
@@ -527,32 +127,499 @@ public class McpPlugin implements JadxPlugin {
      * @throws IllegalArgumentException if the URL is malformed or missing required components.
      */
     private URL parseHttpInterface(String httpInterface) throws IllegalArgumentException {
+        URL url;
         try {
-            URL url = new URL(httpInterface);
-
-            if (!"http".equalsIgnoreCase(url.getProtocol())) {
-                throw new IllegalArgumentException("Invalid protocol: " + url.getProtocol() + ". Only 'http' is supported.");
-            }
-
-            if (url.getHost() == null || url.getHost().isEmpty()) {
-                throw new IllegalArgumentException("Missing or invalid host in HTTP interface: " + httpInterface);
-            }
-
-            if (url.getPort() == -1) {
-                throw new IllegalArgumentException("Port must be explicitly specified in HTTP interface: " + httpInterface);
-            }
-
-            if (url.getPath() != null && !url.getPath().isEmpty() && !url.getPath().equals("/")) {
-                throw new IllegalArgumentException("Path is not allowed in HTTP interface: " + httpInterface);
-            }
-
-            if (url.getQuery() != null || url.getRef() != null || url.getUserInfo() != null) {
-                throw new IllegalArgumentException("HTTP interface must not contain query, fragment, or user info: " + httpInterface);
-            }
-
-            return url;
+            url = new URL(httpInterface);
         } catch (MalformedURLException e) {
             throw new IllegalArgumentException("Malformed HTTP interface URL: " + httpInterface, e);
         }
+
+        if (!"http".equalsIgnoreCase(url.getProtocol())) {
+            throw new IllegalArgumentException("Invalid protocol: " + url.getProtocol() + ". Only 'http' is supported.");
+        }
+
+        if (url.getHost() == null || url.getHost().isEmpty()) {
+            throw new IllegalArgumentException("Missing or invalid host in HTTP interface: " + httpInterface);
+        }
+
+        if (url.getPort() == -1) {
+            throw new IllegalArgumentException("Port must be explicitly specified in HTTP interface: " + httpInterface);
+        }
+
+        if (url.getPath() != null && !url.getPath().isEmpty() && !url.getPath().equals("/")) {
+            throw new IllegalArgumentException("Path is not allowed in HTTP interface: " + httpInterface);
+        }
+
+        if (url.getQuery() != null || url.getRef() != null || url.getUserInfo() != null) {
+            throw new IllegalArgumentException("HTTP interface must not contain query, fragment, or user info: " + httpInterface);
+        }
+
+        return url;
     }
+
+    /**
+     * Starts the TCP server and accepts incoming connections.
+     */
+    private void startServer(URL httpInterface) throws IOException {
+        String host = httpInterface.getHost();
+        int port = httpInterface.getPort();
+        InetAddress bindAddr = InetAddress.getByName(host);
+
+        serverSocket = new ServerSocket(port, 50, bindAddr);
+        executor = Executors.newFixedThreadPool(5);
+        running = true;
+        new Thread(() -> {
+            while (running) {
+                try {
+                    Socket clientSocket = serverSocket.accept();
+                    executor.submit(() -> handleConnection(clientSocket));
+                } catch (IOException e) {
+                    if (running) {
+                        System.err.println("[MCP] Error accepting connection: " + e.getMessage());
+                    }
+                }
+            }
+        }).start();
+    }
+
+    /**
+     * Handles incoming HTTP requests to the plugin.
+     */
+    private void handleConnection(Socket socket) {
+        try (socket;
+             BufferedReader in = new BufferedReader(
+                     new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+             OutputStream outStream = socket.getOutputStream()) {
+
+            String requestLine = in.readLine();
+            if (requestLine == null) {
+                return;
+            }
+
+            String[] parts = requestLine.split(" ");
+            if (parts.length < 2) {
+                return;
+            }
+
+            String method = parts[0];
+            String path = parts[1];
+
+            int contentLength = 0;
+            String header;
+            while ((header = in.readLine()) != null && !header.isEmpty()) {
+                if (header.toLowerCase().startsWith("content-length:")) {
+                    contentLength = Integer.parseInt(header.substring("content-length:".length()).trim());
+                }
+            }
+
+            String body = "";
+            if (contentLength > 0) {
+                char[] buffer = new char[contentLength];
+                int bytesRead = in.read(buffer);
+                body = new String(buffer, 0, bytesRead);
+            }
+
+            JSONObject responseJson;
+
+            if ("/invoke".equals(path) && "POST".equalsIgnoreCase(method)) {
+                responseJson = processInvokeRequest(body);
+            } else if ("/tools".equals(path)) {
+                responseJson = getToolsJson();
+            } else {
+                responseJson = errorJson("Not found");
+            }
+
+            byte[] respBytes = responseJson.toString(2).getBytes(StandardCharsets.UTF_8);
+
+            PrintWriter out = new PrintWriter(outStream, true);
+            out.printf(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %d\r\nConnection: close\r\n\r\n",
+                    respBytes.length);
+            out.flush();
+
+            outStream.write(respBytes);
+            outStream.flush();
+
+        } catch (Exception e) {
+            System.err.println("[MCP] Error handling connection: " + e.getMessage());
+            // At this point, response may be partially written; best-effort logging only.
+        }
+    }
+
+    /**
+     * Handles tool invocation from the client, routing to the correct handler.
+     *
+     * @param requestBody JSON request with tool and parameters
+     * @return JSON response object
+     */
+    private JSONObject processInvokeRequest(String requestBody) {
+        try {
+            JSONObject requestJson = new JSONObject(requestBody);
+
+            String toolName = requestJson.optString("tool", null);
+            if (toolName == null || toolName.isEmpty()) {
+                return errorJson("Missing required field 'tool'");
+            }
+
+            JSONObject params = requestJson.optJSONObject("parameters");
+            if (params == null) {
+                params = new JSONObject();
+            }
+
+            return switch (toolName) {
+                // 1) Manifest
+                case "get_android_manifest" -> handleGetAndroidManifest();
+
+                // 2) Discover classes
+                case "list_all_classes" -> handleListAllClasses(params);
+
+                // 3) Search classes
+                case "search_class_by_name" -> handleSearchClassByName(params);
+
+                // 4) Inspect a class
+                case "get_class_source" -> handleGetClassSource(params);
+                case "get_methods_of_class" -> handleGetMethodsOfClass(params);
+                case "get_fields_of_class" -> handleGetFieldsOfClass(params);
+
+                // 5) Search methods
+                case "search_method_by_name" -> handleSearchMethodByName(params);
+
+                // 6) Inspect a specific method
+                case "get_method_code" -> handleGetMethodCode(params);
+                default -> errorJson("Unknown tool: " + toolName);
+            };
+        } catch (JSONException e) {
+            return errorJson("Invalid JSON in request body: " + e.getMessage());
+        } catch (Exception e) {
+            return errorJson("Unexpected error while processing request: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Return available tools for MCP server in JSON.
+     */
+    private JSONObject getToolsJson() {
+        JSONArray tools = new JSONArray();
+
+        // 1) Get Manifest
+        tools.put(new JSONObject()
+                .put("name", "get_android_manifest")
+                .put("description", "Returns the content of AndroidManifest.xml if available.")
+                .put("parameters", new JSONObject()));
+
+        // 2) Discover classes
+        tools.put(new JSONObject()
+                .put("name", "list_all_classes")
+                .put("description", "Returns a list of all class names.")
+                .put("parameters", new JSONObject()
+                        .put("offset", "int")
+                        .put("limit", "int")));
+
+        // 3) Search classes
+        tools.put(new JSONObject()
+                .put("name", "search_class_by_name")
+                .put("description", "Search class names containing a keyword.")
+                .put("parameters", new JSONObject().put("query", "string")));
+
+        // 4) Inspect a class
+        tools.put(new JSONObject()
+                .put("name", "get_class_source")
+                .put("description", "Returns the decompiled source of a class.")
+                .put("parameters", new JSONObject().put("class_name", "string")));
+
+        tools.put(new JSONObject()
+                .put("name", "get_methods_of_class")
+                .put("description", "Returns all method names of a class.")
+                .put("parameters", new JSONObject().put("class_name", "string")));
+
+        tools.put(new JSONObject()
+                .put("name", "get_fields_of_class")
+                .put("description", "Returns all field names of a class.")
+                .put("parameters", new JSONObject().put("class_name", "string")));
+
+        // 5) Search methods
+        tools.put(new JSONObject()
+                .put("name", "search_method_by_name")
+                .put("description", "Search methods by name.")
+                .put("parameters", new JSONObject().put("method_name", "string")));
+
+        // 6) Inspect a specific method
+        tools.put(new JSONObject()
+                .put("name", "get_method_code")
+                .put("description", "Returns the code for a specific method.")
+                .put("parameters", new JSONObject()
+                        .put("class_name", "string")
+                        .put("method_name", "string")));
+
+        return new JSONObject().put("tools", tools);
+    }
+
+    /**
+     * Small helper to create a standard error JSON object.
+     */
+    private JSONObject errorJson(String message) {
+        JSONObject obj = new JSONObject();
+        obj.put("error", message);
+        return obj;
+    }
+
+    /**
+     * Retrieves the content of AndroidManifest.xml
+     * <p>
+     * This extracts the decoded XML from the ResContainer returned by loadContent().
+     *
+     * @return The manifest XML as a string or an error message.
+     */
+    private JSONObject handleGetAndroidManifest() {
+        try {
+            for (ResourceFile resFile : context.getDecompiler().getResources()) {
+                if (resFile.getType() == ResourceType.MANIFEST) {
+                    ResContainer container = resFile.loadContent();
+                    if (container.getText() != null) {
+                        String manifestCode = container.getText().getCodeStr();
+                        return new JSONObject()
+                                .put("manifest", manifestCode);
+                    } else {
+                        return errorJson("Manifest content is empty or could not be decoded.");
+                    }
+                }
+            }
+            return errorJson("AndroidManifest.xml not found.");
+        } catch (Exception e) {
+            return errorJson("Error retrieving AndroidManifest.xml: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Lists all classes with optional pagination.
+     *
+     * @param params JSON with optional offset and limit
+     * @return JSON response with class list and metadata
+     */
+    private JSONObject handleListAllClasses(JSONObject params) {
+        int offset = params.optInt("offset", 0);
+        int limit = params.optInt("limit", 250);
+        int maxLimit = 500;
+        if (limit > maxLimit) {
+            limit = maxLimit;
+        }
+
+        List<JavaClass> allClasses = context.getDecompiler().getClassesWithInners();
+        int total = allClasses.size();
+
+        JSONArray array = new JSONArray();
+        for (int i = offset; i < Math.min(offset + limit, total); i++) {
+            JavaClass cls = allClasses.get(i);
+            array.put(cls.getFullName());
+        }
+
+        return new JSONObject()
+                .put("total", total)
+                .put("offset", offset)
+                .put("limit", limit)
+                .put("classes", array);
+    }
+
+    /**
+     * Search class names based on a partial query string and return matches.
+     *
+     * @param params JSON object with key "query"
+     * @return JSON object with array of matched class names under "results"
+     */
+    private JSONObject handleSearchClassByName(JSONObject params) {
+        String query = params.optString("query", "").toLowerCase();
+        JSONArray array = new JSONArray();
+
+        for (JavaClass cls : context.getDecompiler().getClassesWithInners()) {
+            String fullName = cls.getFullName();
+            if (fullName.toLowerCase().contains(query)) {
+                array.put(fullName);
+            }
+        }
+
+        return new JSONObject()
+                .put("query", query)
+                .put("results", array);
+    }
+
+    /**
+     * Retrieves the full decompiled source code of a specific Java class.
+     *
+     * @param params A JSON object containing the required parameter:
+     *               - "class_name": The fully qualified name of the class to
+     *               retrieve.
+     */
+    private JSONObject handleGetClassSource(JSONObject params) {
+        String className = params.optString("class_name", null);
+        if (className == null || className.isEmpty()) {
+            return errorJson("Missing required parameter 'class_name'");
+        }
+
+        try {
+            for (JavaClass cls : context.getDecompiler().getClasses()) {
+                if (cls.getFullName().equals(className)) {
+                    String code = cls.getCode();
+                    return new JSONObject()
+                            .put("class_name", className)
+                            .put("source", code);
+                }
+            }
+            return errorJson("Class not found: " + className);
+        } catch (Exception e) {
+            return errorJson("Error fetching class: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Retrieves a list of all method names declared in the specified Java class.
+     *
+     * @param params A JSON object containing the required parameter:
+     *               - "class_name": The fully qualified name of the class.
+     */
+    private JSONObject handleGetMethodsOfClass(JSONObject params) {
+        String className = params.optString("class_name", null);
+        if (className == null || className.isEmpty()) {
+            return errorJson("Missing required parameter 'class_name'");
+        }
+
+        try {
+            for (JavaClass cls : context.getDecompiler().getClasses()) {
+                if (cls.getFullName().equals(className)) {
+                    JSONArray array = new JSONArray();
+                    for (JavaMethod method : cls.getMethods()) {
+                        array.put(method.getName());
+                    }
+                    return new JSONObject()
+                            .put("class_name", className)
+                            .put("methods", array);
+                }
+            }
+            return errorJson("Class not found: " + className);
+        } catch (Exception e) {
+            return errorJson("Error fetching methods: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Retrieves all field names defined in the specified Java class.
+     *
+     * @param params A JSON object containing the required parameter:
+     *               - "class_name": The fully qualified name of the class.
+     */
+    private JSONObject handleGetFieldsOfClass(JSONObject params) {
+        String className = params.optString("class_name", null);
+        if (className == null || className.isEmpty()) {
+            return errorJson("Missing required parameter 'class_name'");
+        }
+
+        try {
+            for (JavaClass cls : context.getDecompiler().getClasses()) {
+                if (cls.getFullName().equals(className)) {
+                    JSONArray array = new JSONArray();
+                    for (JavaField field : cls.getFields()) {
+                        array.put(field.getName());
+                    }
+                    return new JSONObject()
+                            .put("class_name", className)
+                            .put("fields", array);
+                }
+            }
+            return errorJson("Class not found: " + className);
+        } catch (Exception e) {
+            return errorJson("Error fetching fields: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Searches all decompiled classes for methods whose names match or contain the
+     * provided string.
+     *
+     * @param params A JSON object containing the required parameter:
+     *               - "method_name": A case-insensitive string to match method
+     *               names.
+     */
+    private JSONObject handleSearchMethodByName(JSONObject params) {
+        String methodName = params.optString("method_name", null);
+        if (methodName == null || methodName.isEmpty()) {
+            return errorJson("Missing required parameter 'method_name'");
+        }
+
+        try {
+            JSONArray results = new JSONArray();
+            for (JavaClass cls : context.getDecompiler().getClasses()) {
+                cls.decompile();
+                for (JavaMethod method : cls.getMethods()) {
+                    if (method.getName().toLowerCase().contains(methodName.toLowerCase())) {
+                        JSONObject entry = new JSONObject()
+                                .put("class_name", cls.getFullName())
+                                .put("method_name", method.getName());
+                        results.put(entry);
+                    }
+                }
+            }
+
+            JSONObject response = new JSONObject()
+                    .put("query", methodName)
+                    .put("results", results);
+
+            if (results.isEmpty()) {
+                response.put("message", "No methods found for: " + methodName);
+            }
+
+            return response;
+        } catch (Exception e) {
+            return errorJson("Error searching methods: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Extracts the decompiled source code of a specific method within a given class.
+     *
+     * @param params A JSON object containing:
+     *               - "class_name": The fully qualified name of the class.
+     *               - "method_name": The name of the method to extract.
+     */
+    private JSONObject handleGetMethodCode(JSONObject params) {
+        String className = params.optString("class_name", null);
+        String methodName = params.optString("method_name", null);
+
+        if (className == null || className.isEmpty()) {
+            return errorJson("Missing required parameter 'class_name'");
+        }
+        if (methodName == null || methodName.isEmpty()) {
+            return errorJson("Missing required parameter 'method_name'");
+        }
+
+        try {
+            for (JavaClass cls : context.getDecompiler().getClasses()) {
+                if (cls.getFullName().equals(className)) {
+                    cls.decompile();
+                    for (JavaMethod method : cls.getMethods()) {
+                        if (method.getName().equals(methodName)) {
+                            String methodCode = method.getCodeStr();
+                            if (methodCode == null || methodCode.trim().isEmpty()) {
+                                String classCode = cls.getCode();
+                                String extracted = MethodExtractor.extract(method, classCode);
+                                if (extracted != null && !extracted.trim().isEmpty()) {
+                                    return new JSONObject()
+                                            .put("class_name", className)
+                                            .put("method_name", methodName)
+                                            .put("code", extracted);
+                                }
+                            }
+                            return new JSONObject()
+                                    .put("class_name", className)
+                                    .put("method_name", methodName)
+                                    .put("code", methodCode);
+                        }
+                    }
+                    return errorJson("Method '" + methodName + "' not found in class '" + className + "'");
+                }
+            }
+            return errorJson("Class '" + className + "' not found");
+        } catch (Exception e) {
+            return errorJson("Error fetching method code: " + e.getMessage());
+        }
+    }
+
 }
