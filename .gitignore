@@ -10,6 +10,10 @@ build/
 # Python files
 __pycache__/
 
+# Python build files
+dist/
+*.egg-info/
+
 # IDE files
 .idea/
 .vscode/
@@ -17,6 +21,7 @@ __pycache__/
 
 # Environment files
 venv/
+.venv/
 .env
 
 # Logs

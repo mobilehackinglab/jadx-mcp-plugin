@@ -6,47 +6,28 @@ This project provides a [Jadx](https://github.com/skylot/jadx) plugin written in
 
 ### 🧰 Setup Instructions
 
+Install uv first,
+see [Installation | uv](https://docs.astral.sh/uv/getting-started/installation/)
+or use your package manager.
+
+Then clone this repository
 ```bash
-# Clone this repository
 git clone https://github.com/mobilehackinglab/jadx-mcp-plugin.git
-cd jadx-mcp-plugin
-
-# Create and activate a virtual environment
-python3 -m venv venv
-
-# Activate:
-source venv/bin/activate      # Linux/Mac
-.\venv\Scripts\activate       # Windows
-```
-
-### Install Python dependencies
-```bash
-pip install -r requirements.txt 
 ```
 
 ### 🧠 Setup Claude MCP CLient Integration
 To use this adapter in Claude Desktop, go to `File` -> `Settings` -> `Developer` -> `Edit Config` -> `claude_desktop_config.json` and add an MCP server pointing to the Python executable in the venv (to prevent depedency issues) and the full adapter path following below examples:
 
-Windows:
-
 ```json
 {
   "mcpServers": {
     "Jadx MCP Server": {
-      "command": "C:\\Workset\\jadx-mcp-plugin\\venv\\Scripts\\python.exe",
-      "args": ["C:\\Workset\\jadx-mcp-plugin\\fastmcp_adapter.py"]
-    }
-  }
-}
-```
-
-MacOS / Linux:
-```json
-{
-  "mcpServers": {
-    "Jadx MCP Server": {
-      "command": "/Users/yourname/jadx-mcp-plugin/venv/bin/python",
-      "args": ["/Users/yourname/jadx-mcp-plugin/fastmcp_adapter.py"]
+      "command": "uvx",
+      "args": [
+        "--from",
+        "path-to/jadx-mcp-plugin",
+        "jadx-mcp"
+      ]
     }
   }
 }
