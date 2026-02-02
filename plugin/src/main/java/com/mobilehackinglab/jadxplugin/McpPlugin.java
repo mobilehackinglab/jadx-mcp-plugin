@@ -286,6 +286,16 @@ public class McpPlugin implements JadxPlugin {
 
                 // 6) Inspect a specific method
                 case "get_method_code" -> handleGetMethodCode(params);
+
+                // 7) Resources
+                case "get_all_resource_file_names" -> handleGetAllResourceFileNames();
+                case "get_resource_file" -> handleGetResourceFile(params);
+
+                // 8) Xrefs
+                case "get_class_xrefs" -> handleGetClassXrefs(params);
+                case "get_method_xrefs" -> handleGetMethodXrefs(params);
+                case "get_field_xrefs" -> handleGetFieldXrefs(params);
+
                 default -> errorJson("Unknown tool: " + toolName);
             };
         } catch (JSONException e) {
@@ -350,6 +360,37 @@ public class McpPlugin implements JadxPlugin {
                 .put("parameters", new JSONObject()
                         .put("class_name", "string")
                         .put("method_name", "string")));
+
+        // 7) Resources
+        tools.put(new JSONObject()
+                .put("name", "get_all_resource_file_names")
+                .put("description", "Returns a list of all resource file names.")
+                .put("parameters", new JSONObject()));
+
+        tools.put(new JSONObject()
+                .put("name", "get_resource_file")
+                .put("description", "Returns the content of a specific resource file.")
+                .put("parameters", new JSONObject().put("resource_name", "string")));
+
+        // 8) Xrefs
+        tools.put(new JSONObject()
+                .put("name", "get_class_xrefs")
+                .put("description", "Returns all references to a class.")
+                .put("parameters", new JSONObject().put("class_name", "string")));
+
+        tools.put(new JSONObject()
+                .put("name", "get_method_xrefs")
+                .put("description", "Returns all references to a method.")
+                .put("parameters", new JSONObject()
+                        .put("class_name", "string")
+                        .put("method_name", "string")));
+
+        tools.put(new JSONObject()
+                .put("name", "get_field_xrefs")
+                .put("description", "Returns all references to a field.")
+                .put("parameters", new JSONObject()
+                        .put("class_name", "string")
+                        .put("field_name", "string")));
 
         return new JSONObject().put("tools", tools);
     }
@@ -619,6 +660,177 @@ public class McpPlugin implements JadxPlugin {
             return errorJson("Class '" + className + "' not found");
         } catch (Exception e) {
             return errorJson("Error fetching method code: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Retrieves a list of all resource file names in the APK.
+     */
+    private JSONObject handleGetAllResourceFileNames() {
+        try {
+            JSONArray array = new JSONArray();
+            for (ResourceFile resFile : context.getDecompiler().getResources()) {
+                array.put(resFile.getOriginalName());
+            }
+            return new JSONObject().put("resources", array);
+        } catch (Exception e) {
+            return errorJson("Error retrieving resource names: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Retrieves the content of a specific resource file.
+     *
+     * @param params A JSON object containing:
+     *               - "resource_name": The name of the resource to retrieve.
+     */
+    private JSONObject handleGetResourceFile(JSONObject params) {
+        String resourceName = params.optString("resource_name", null);
+        if (resourceName == null || resourceName.isEmpty()) {
+            return errorJson("Missing required parameter 'resource_name'");
+        }
+
+        try {
+            for (ResourceFile resFile : context.getDecompiler().getResources()) {
+                if (resourceName.equals(resFile.getOriginalName())) {
+                    ResContainer container = resFile.loadContent();
+                    if (container.getText() != null) {
+                        return new JSONObject()
+                                .put("resource_name", resourceName)
+                                .put("content", container.getText().getCodeStr());
+                    }
+                    return errorJson("Resource content is empty or not text.");
+                }
+            }
+            return errorJson("Resource not found: " + resourceName);
+        } catch (Exception e) {
+            return errorJson("Error retrieving resource: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Retrieves all references (xrefs) to a class.
+     *
+     * @param params A JSON object containing:
+     *               - "class_name": The fully qualified name of the class.
+     */
+    private JSONObject handleGetClassXrefs(JSONObject params) {
+        String className = params.optString("class_name", null);
+        if (className == null || className.isEmpty()) {
+            return errorJson("Missing required parameter 'class_name'");
+        }
+
+        try {
+            for (JavaClass cls : context.getDecompiler().getClasses()) {
+                if (cls.getFullName().equals(className)) {
+                    JSONArray array = new JSONArray();
+                    for (JavaNode node : cls.getUseIn()) {
+                        JSONObject usage = new JSONObject();
+                        usage.put("name", node.getName());
+                        usage.put("full_name", node.getFullName());
+                        usage.put("type", node.getClass().getSimpleName());
+                        array.put(usage);
+                    }
+                    return new JSONObject()
+                            .put("class_name", className)
+                            .put("xrefs", array);
+                }
+            }
+            return errorJson("Class not found: " + className);
+        } catch (Exception e) {
+            return errorJson("Error fetching class xrefs: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Retrieves all references (xrefs) to a method.
+     *
+     * @param params A JSON object containing:
+     *               - "class_name": The fully qualified name of the class.
+     *               - "method_name": The name of the method.
+     */
+    private JSONObject handleGetMethodXrefs(JSONObject params) {
+        String className = params.optString("class_name", null);
+        String methodName = params.optString("method_name", null);
+
+        if (className == null || className.isEmpty()) {
+            return errorJson("Missing required parameter 'class_name'");
+        }
+        if (methodName == null || methodName.isEmpty()) {
+            return errorJson("Missing required parameter 'method_name'");
+        }
+
+        try {
+            for (JavaClass cls : context.getDecompiler().getClasses()) {
+                if (cls.getFullName().equals(className)) {
+                    for (JavaMethod method : cls.getMethods()) {
+                        if (method.getName().equals(methodName)) {
+                            JSONArray array = new JSONArray();
+                            for (JavaNode node : method.getUseIn()) {
+                                JSONObject usage = new JSONObject();
+                                usage.put("name", node.getName());
+                                usage.put("full_name", node.getFullName());
+                                usage.put("type", node.getClass().getSimpleName());
+                                array.put(usage);
+                            }
+                            return new JSONObject()
+                                    .put("class_name", className)
+                                    .put("method_name", methodName)
+                                    .put("xrefs", array);
+                        }
+                    }
+                    return errorJson("Method '" + methodName + "' not found in class '" + className + "'");
+                }
+            }
+            return errorJson("Class '" + className + "' not found");
+        } catch (Exception e) {
+            return errorJson("Error fetching method xrefs: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Retrieves all references (xrefs) to a field.
+     *
+     * @param params A JSON object containing:
+     *               - "class_name": The fully qualified name of the class.
+     *               - "field_name": The name of the field.
+     */
+    private JSONObject handleGetFieldXrefs(JSONObject params) {
+        String className = params.optString("class_name", null);
+        String fieldName = params.optString("field_name", null);
+
+        if (className == null || className.isEmpty()) {
+            return errorJson("Missing required parameter 'class_name'");
+        }
+        if (fieldName == null || fieldName.isEmpty()) {
+            return errorJson("Missing required parameter 'field_name'");
+        }
+
+        try {
+            for (JavaClass cls : context.getDecompiler().getClasses()) {
+                if (cls.getFullName().equals(className)) {
+                    for (JavaField field : cls.getFields()) {
+                        if (field.getName().equals(fieldName)) {
+                            JSONArray array = new JSONArray();
+                            for (JavaNode node : field.getUseIn()) {
+                                JSONObject usage = new JSONObject();
+                                usage.put("name", node.getName());
+                                usage.put("full_name", node.getFullName());
+                                usage.put("type", node.getClass().getSimpleName());
+                                array.put(usage);
+                            }
+                            return new JSONObject()
+                                    .put("class_name", className)
+                                    .put("field_name", fieldName)
+                                    .put("xrefs", array);
+                        }
+                    }
+                    return errorJson("Field '" + fieldName + "' not found in class '" + className + "'");
+                }
+            }
+            return errorJson("Class '" + className + "' not found");
+        } catch (Exception e) {
+            return errorJson("Error fetching field xrefs: " + e.getMessage());
         }
     }
 
