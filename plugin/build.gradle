@@ -4,7 +4,7 @@ plugins {
 }
 
 group = 'jadx.plugins'
-version = '1.4'
+version = '1.5'
 
 repositories {
     mavenCentral()
@@ -29,7 +29,7 @@ jar {
         attributes(
             'Jadx-Plugin': 'true',
             'Jadx-Plugin-Class': 'com.mobilehackinglab.jadxplugin.McpPlugin',
-            'Jadx-Plugin-Version': '1.4.0',
+            'Jadx-Plugin-Version': '1.5.0',
             'Jadx-Plugin-Id': 'jadx-mcp-plugin',
             'Jadx-Plugin-Description': 'Exposes Jadx info over HTTP',
             'Jadx-Plugin-Author': 'Mobile Hacking Lab'

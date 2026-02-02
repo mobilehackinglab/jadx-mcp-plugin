@@ -95,6 +95,57 @@ def get_android_manifest() -> str:
     """
     return invoke_jadx("get_android_manifest")
 
+
+@mcp.tool()
+def get_all_resource_file_names(limit: int = 250, offset: int = 0) -> dict:
+    """
+    Returns a list of all resource file names in the APK.
+
+    Params:
+    - limit: Max number of resources to return (default 250)
+    - offset: Starting index of resource list
+    """
+    return invoke_jadx("get_all_resource_file_names", {"limit": limit, "offset": offset})
+
+
+@mcp.tool()
+def get_resource_file(resource_name: str) -> dict:
+    """
+    Returns the content of a specific resource file.
+    """
+    return invoke_jadx("get_resource_file", {"resource_name": resource_name})
+
+
+@mcp.tool()
+def get_class_xrefs(class_name: str) -> dict:
+    """
+    Returns all references to a class.
+    """
+    return invoke_jadx("get_class_xrefs", {"class_name": class_name})
+
+
+@mcp.tool()
+def get_method_xrefs(class_name: str, method_name: str) -> dict:
+    """
+    Returns all references to a method.
+    """
+    return invoke_jadx("get_method_xrefs", {
+        "class_name": class_name,
+        "method_name": method_name
+    })
+
+
+@mcp.tool()
+def get_field_xrefs(class_name: str, field_name: str) -> dict:
+    """
+    Returns all references to a field.
+    """
+    return invoke_jadx("get_field_xrefs", {
+        "class_name": class_name,
+        "field_name": field_name
+    })
+
+
 @mcp.resource("jadx://tools")
 def get_tools_resource() -> dict:
     """
