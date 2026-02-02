@@ -288,7 +288,7 @@ public class McpPlugin implements JadxPlugin {
                 case "get_method_code" -> handleGetMethodCode(params);
 
                 // 7) Resources
-                case "get_all_resource_file_names" -> handleGetAllResourceFileNames();
+                case "get_all_resource_file_names" -> handleGetAllResourceFileNames(params);
                 case "get_resource_file" -> handleGetResourceFile(params);
 
                 // 8) Xrefs
@@ -365,7 +365,9 @@ public class McpPlugin implements JadxPlugin {
         tools.put(new JSONObject()
                 .put("name", "get_all_resource_file_names")
                 .put("description", "Returns a list of all resource file names.")
-                .put("parameters", new JSONObject()));
+                .put("parameters", new JSONObject()
+                        .put("offset", "int")
+                        .put("limit", "int")));
 
         tools.put(new JSONObject()
                 .put("name", "get_resource_file")
@@ -666,13 +668,29 @@ public class McpPlugin implements JadxPlugin {
     /**
      * Retrieves a list of all resource file names in the APK.
      */
-    private JSONObject handleGetAllResourceFileNames() {
+    private JSONObject handleGetAllResourceFileNames(JSONObject params) {
+        int offset = params.optInt("offset", 0);
+        int limit = params.optInt("limit", 250);
+        int maxLimit = 500;
+        if (limit > maxLimit) {
+            limit = maxLimit;
+        }
+
         try {
+            List<ResourceFile> resources = context.getDecompiler().getResources();
+            int total = resources.size();
+
             JSONArray array = new JSONArray();
-            for (ResourceFile resFile : context.getDecompiler().getResources()) {
+            for (int i = offset; i < Math.min(offset + limit, total); i++) {
+                ResourceFile resFile = resources.get(i);
                 array.put(resFile.getOriginalName());
             }
-            return new JSONObject().put("resources", array);
+
+            return new JSONObject()
+                    .put("total", total)
+                    .put("offset", offset)
+                    .put("limit", limit)
+                    .put("resources", array);
         } catch (Exception e) {
             return errorJson("Error retrieving resource names: " + e.getMessage());
         }

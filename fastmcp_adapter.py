@@ -97,11 +97,15 @@ def get_android_manifest() -> str:
 
 
 @mcp.tool()
-def get_all_resource_file_names() -> dict:
+def get_all_resource_file_names(limit: int = 250, offset: int = 0) -> dict:
     """
     Returns a list of all resource file names in the APK.
+
+    Params:
+    - limit: Max number of resources to return (default 250)
+    - offset: Starting index of resource list
     """
-    return invoke_jadx("get_all_resource_file_names")
+    return invoke_jadx("get_all_resource_file_names", {"limit": limit, "offset": offset})
 
 
 @mcp.tool()
