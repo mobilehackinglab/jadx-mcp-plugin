@@ -712,12 +712,38 @@ public class McpPlugin implements JadxPlugin {
             for (ResourceFile resFile : context.getDecompiler().getResources()) {
                 if (resourceName.equals(resFile.getOriginalName())) {
                     ResContainer container = resFile.loadContent();
-                    if (container.getText() != null) {
+                    String contentStr = null;
+
+                    if (container.getDataType() == ResContainer.DataType.TEXT || container.getDataType() == ResContainer.DataType.RES_TABLE) {
+                        ICodeInfo content = container.getText();
+                        if (content != null) {
+                            contentStr = content.getCodeStr();
+                        }
+                    } else if (container.getDataType() == ResContainer.DataType.RES_LINK) {
+                        try {
+                            contentStr = ResourcesLoader.decodeStream(resFile, (size, is) -> {
+                                ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+                                int nRead;
+                                byte[] data = new byte[1024];
+                                while ((nRead = is.read(data, 0, data.length)) != -1) {
+                                    buffer.write(data, 0, nRead);
+                                }
+                                buffer.flush();
+                                return new String(buffer.toByteArray(), StandardCharsets.UTF_8);
+                            });
+                        } catch (Exception e) {
+                            return errorJson("Error decoding resource stream: " + e.getMessage());
+                        }
+                    } else {
+                        return errorJson("Unsupported resource type: " + container.getDataType());
+                    }
+
+                    if (contentStr != null) {
                         return new JSONObject()
                                 .put("resource_name", resourceName)
-                                .put("content", container.getText().getCodeStr());
+                                .put("content", contentStr);
                     }
-                    return errorJson("Resource content is empty or not text.");
+                    return errorJson("Resource content is empty.");
                 }
             }
             return errorJson("Resource not found: " + resourceName);
