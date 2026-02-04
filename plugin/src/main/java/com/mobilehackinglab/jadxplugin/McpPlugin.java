@@ -712,10 +712,11 @@ public class McpPlugin implements JadxPlugin {
             for (ResourceFile resFile : context.getDecompiler().getResources()) {
                 if (resourceName.equals(resFile.getOriginalName())) {
                     ResContainer container = resFile.loadContent();
-                    if (container.getText() != null) {
+                    ICodeInfo content = container.getText();
+                    if (content != null) {
                         return new JSONObject()
                                 .put("resource_name", resourceName)
-                                .put("content", container.getText().getCodeStr());
+                                .put("content", content.getCodeStr());
                     }
                     return errorJson("Resource content is empty or not text.");
                 }
